@@ -233,3 +233,172 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
         env = FrameStack(env, 4)
     return env
 
+
+class EpisodicRewardEnv(gym.Wrapper):
+    def __init__(self, env):
+        """Makes getting_reward == end-of-episode, but only reset on true game over.
+        Done for games like Bowling, where you get reward after 2 shoots, but the game
+        itself takes very long to finish.
+        """
+        gym.Wrapper.__init__(self, env)
+        self.reward = 0
+        self.lives = 0
+        self.was_real_done = True
+        self.counter = 0
+        self.frames_with_no_reward_counter = 0
+        self.frames_with_no_reward = 1000
+        self.minimal_reward = 0
+        
+        if 'DoubleDunk' in env.spec.id:
+            self.reward_counter = 2
+        else:
+            self.reward_counter = 1
+        
+        if 'Tennis' in env.spec.id:
+            self.frames_with_no_reward = 200
+            self.minimal_reward = -1
+    
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        self.was_real_done = done
+        
+        lives = self.env.unwrapped.ale.lives()
+        
+        if reward == 0:
+            self.frames_with_no_reward_counter += 1
+        else:
+            self.frames_with_no_reward_counter = 0
+        
+        if self.frames_with_no_reward_counter > self.frames_with_no_reward:
+            self.was_real_done = True
+            reward = self.minimal_reward
+        
+        if (reward != self.reward and np.abs(reward) > 0) or (lives < self.lives and lives > 0):
+            self.counter += 1
+            if self.counter == self.reward_counter:
+                done = True
+                self.counter = 0
+        self.reward = reward
+        self.lives = lives
+        return obs, reward, done, info
+    
+    def reset(self, **kwargs):
+        """Reset only when lives are exhausted.
+        This way all states are still reachable even though lives are episodic,
+        and the learner need not know about any of this behind-the-scenes.
+        """
+        if self.was_real_done:
+            obs = self.env.reset(**kwargs)
+            reward = 0
+        else:
+            # no-op step to advance from terminal/lost life state
+            obs, reward, done, _ = self.env.step(0)
+            self.was_real_done = done
+            
+            if self.was_real_done:
+                obs = self.env.reset(**kwargs)
+                reward = 0
+        self.reward = reward
+        self.lives = self.env.unwrapped.ale.lives()
+        self.counter = 0
+        self.frames_with_no_reward_counter = 0
+        return obs
+
+
+class EpisodicFrameEnv(gym.Wrapper):
+    def __init__(self, env):
+        """Makes end-of-episode after 490 frames, but only reset on true game over.
+        Done for games like Enduro, Dubledunk, Icehockey... where you can stop the game
+        and continue as a new episode.
+        """
+        gym.Wrapper.__init__(self, env)
+        self.reward = 0
+        self.lives = 0
+        self.was_real_done = True
+        
+        self.frames_counter = 0
+        
+        self.minimal_reward = 0
+        
+        self.max_frame_counter = 490
+    
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        self.was_real_done = done
+        
+        lives = self.env.unwrapped.ale.lives()
+        
+        self.frames_counter += 1
+        
+        if self.frames_counter > self.max_frame_counter:
+            done = True
+        
+        self.reward = reward
+        self.lives = lives
+        return obs, reward, done, info
+    
+    def reset(self, **kwargs):
+        """Reset only when lives are exhausted.
+        This way all states are still reachable even though lives are episodic,
+        and the learner need not know about any of this behind-the-scenes.
+        """
+        if self.was_real_done:
+            obs = self.env.reset(**kwargs)
+            reward = 0
+        else:
+            # no-op step to advance from terminal/lost life state
+            obs, reward, done, _ = self.env.step(0)
+            self.was_real_done = done
+            
+            if self.was_real_done:
+                obs = self.env.reset(**kwargs)
+                reward = 0
+        self.reward = reward
+        self.lives = self.env.unwrapped.ale.lives()
+        
+        self.frames_counter = 0
+        return obs
+
+
+class NormRewardEnv(gym.RewardWrapper):
+    def __init__(self, env, scaling_factor):
+        """ "Normalize" rewards by dividing by a constant factor for numerical stability"""
+        gym.RewardWrapper.__init__(self, env)
+        self.scaling_factor = scaling_factor
+    
+    def reward(self, reward):
+        """Divide reward by constant factor to make rewards smaller and system more stable"""
+        return reward / self.scaling_factor
+
+
+def wrap_modified_rr(env, episode_life=True, episode_reward=False, episode_frame=False, norm_rewards=True,
+                     frame_stack=False, scale=False):
+    """Configure environment for DeepMind-style Atari modified as described in RUDDER paper;
+    """
+    if episode_life:
+        print("Episode Life")
+        env = EpisodicLifeEnv(env)
+    if episode_reward:
+        print("Episode Reward")
+        env = EpisodicRewardEnv(env)
+    if episode_frame:
+        print("Episode Frame")
+        env = EpisodicFrameEnv(env)
+    
+    original_reward = ('DoubleDunk' in env.spec.id) or ('Boxing' in env.spec.id) or ('Freeway' in env.spec.id) or \
+                      ('Enduro' in env.spec.id) or ('IceHockey' in env.spec.id) or ('Pong' in env.spec.id) or \
+                      ('Skiing' in env.spec.id) or ('Bowling' in env.spec.id)
+    
+    if 'FIRE' in env.unwrapped.get_action_meanings():
+        env = FireResetEnv(env)
+    env = WarpFrame(env)
+    if scale:
+        env = ScaledFloatFrame(env)
+    if norm_rewards and not original_reward:
+        print("Normalizing reward....")
+        env = NormRewardEnv(env, 100.)
+    else:
+        print("Normal reward")
+    if frame_stack:
+        env = FrameStack(env, 4)
+    return env

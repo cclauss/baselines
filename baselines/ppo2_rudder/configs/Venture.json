@@ -1,0 +1,152 @@
+{
+  "specs": "Venture_policy_cnn",
+  "cuda_gpu": 0,
+  "inter_op_parallelism_threads": 8,
+  "intra_op_parallelism_threads": 8,
+  "tensorflow_allow_growth": true,
+  "random_seed": 123,
+  "max_n_frames": 108000,
+  "policy": "cnn",
+  "working_dir": "workingdir/ppo2_rudder",
+  "plot_at": 10,
+  "save_at": 1000,
+  "n_savefiles": 5,
+  "load_file_dict": {
+  },
+  "example_load_file_dict": {
+    "rr_buffer": "/FOLDER/saves/state-3700.h5py",
+    "states": "/FOLDER/saves/state-3700.pkl.zip",
+    "model": "/FOLDER/saves/checkpoint-3700",
+    "RR": "/FOLDER/saves/checkpoint-3700"
+  },
+  "bl_config": {
+    "env": "VentureNoFrameskip-v4",
+    "num_timesteps": 200e6,
+    "episode_reward": false,
+    "episode_life": true,
+    "episode_frame": false,
+    "temperature_decay": true,
+    "num_actors": 8,
+    "lr_coef": 1,
+    "ent_coef": 0.01
+  },
+  "rudder_config": {
+    "write_histograms": false,
+    "exploration_config": {
+      "sample_actions_from_softmax": true,
+      "temporal_safe_exploration": true,
+      "save_pi_threshold": 0.01
+    },
+    "reward_redistribution_config": {
+      "lambda_eligibility_trace": 0.5,
+      "vf_contrib": 0.5,
+      "use_reward_redistribution_quality_threshold": 0.2,
+      "use_reward_redistribution": true,
+      "rr_junksize": 500,
+      "cont_pred_w": 1.0,
+      "intgrd_steps": 500,
+      "intgrd_batchsize": 500
+    },
+    "observation_network_config": {
+      "show_states": true,
+      "show_statedeltas": true,
+      "prepoc_states": [
+        {
+          "type": "ConvLayer",
+          "name": "cf1",
+          "num_outputs": 64,
+          "ksize": 8,
+          "padding": "VALID",
+          "a": "tensorflow.nn.relu",
+          "weight_initializer": "0.1:tensorflow.orthogonal_initializer",
+          "strides": [1,2,2,1]
+        },
+        {
+          "type": "MaxPoolingLayer",
+          "name": "mpf1",
+          "ksize": [1,2,2,1],
+          "strides": [1,2,2,1]
+        }
+      ],
+      "prepoc_deltas": [
+        {
+          "type": "ConvLayer",
+          "name": "cd1",
+          "num_outputs": 64,
+          "ksize": 8,
+          "padding": "VALID",
+          "a": "tensorflow.nn.relu",
+          "weight_initializer": "0.1:tensorflow.orthogonal_initializer",
+          "strides": [1,2,2,1]
+        },
+        {
+          "type": "MaxPoolingLayer",
+          "name": "mpd1",
+          "ksize": [1,2,2,1],
+          "strides": [1,2,2,1]
+        }
+      ],
+      "prepoc_observations": [
+        {
+          "type": "ConvLayer",
+          "name": "c3",
+          "num_outputs": 32,
+          "ksize": 3,
+          "padding": "VALID",
+          "a": "tensorflow.nn.relu",
+          "weight_initializer": "0.1:tensorflow.orthogonal_initializer"
+        },
+        {
+          "type": "MaxPoolingLayer",
+          "name": "mpp1",
+          "ksize": [1,2,2,1],
+          "strides": [1,2,2,1]
+        }
+      ]
+    },
+    "lstm_network_config": {
+      "show_actions": true,
+      "reversed": false,
+      "layers": [
+        {
+          "type": "LSTMLayer",
+          "n_units": 64,
+          "a_out": "linear"
+        }
+      ],
+      "initializations": {
+        "og_bias": -5,
+        "ig_bias": -5,
+        "ci_bias": 0,
+        "fg_bias": 12,
+        "w_ig": [0.1,0.001],
+        "w_og": [0.1,0.001],
+        "w_ci": [0.0001,0.001],
+        "w_fg": [0.1,0.001
+        ]
+      },
+      "timestep_encoding": {
+        "max_value": 10000,
+        "triangle_span": 500
+      }
+    },
+    "lessons_buffer_config": {
+      "type": "constant",
+      "n_replay_updates": 1,
+      "buffer_size": 64,
+      "traina2c": true
+    },
+    "training_config": {
+      "n_no_rr_updates": 0,
+      "n_pretrain_games": 20,
+      "downscale_lr_policylag": true,
+      "optimizer": "AdamOptimizer",
+      "optimizer_params": {
+        "learning_rate": 1e-4
+      },
+      "l1": 1e-7,
+      "l2": 0,
+      "clip_gradients": 0.5
+    }
+  }
+}
