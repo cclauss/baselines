@@ -177,8 +177,10 @@ class Model(object):
         vf_losses2 = tf.square(vpredclipped - R)
         vf_loss = 0.5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
         
-        # Advantage with vf and reward redistribution
+        # Scale redistributed reward contribution based on reward redistribution prediction error
         scaled_rr = LSTM_RELSQERR * RR + (1 - LSTM_RELSQERR) * ADV
+        # Mix original vf and redistributed reward (we recommend a vf_contrib of 0.5 to be on the safe side in case
+        # there is a lot of immediate reward)
         ADV = (reward_redistribution_config['vf_contrib'] * ADV
                + (1 - reward_redistribution_config['vf_contrib']) * scaled_rr)
         
